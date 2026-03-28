@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { User, Department, Location, Role } = require('../models');
+const { sequelize, User, Department, Location, Role, AuditLog } = require('../models');
 const { Op } = require('sequelize');
 
 // Get all users with filters, search, pagination
@@ -21,11 +21,13 @@ router.get('/', async (req, res) => {
     const where = {};
 
     if (search) {
+      const likeOp = sequelize.getDialect() === 'sqlite' ? Op.like : Op.iLike;
       where[Op.or] = [
-        { firstName: { [Op.iLike]: `%${search}%` } },
-        { lastName: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
-        { username: { [Op.iLike]: `%${search}%` } }
+        { firstName: { [likeOp]: `%${search}%` } },
+        { lastName: { [likeOp]: `%${search}%` } },
+        { email: { [likeOp]: `%${search}%` } },
+        { username: { [likeOp]: `%${search}%` } },
+        { position: { [likeOp]: `%${search}%` } }
       ];
     }
     if (status) where.status = status;
@@ -33,7 +35,10 @@ router.get('/', async (req, res) => {
     if (departmentId) where.departmentId = parseInt(departmentId);
 
     const { count, rows } = await User.findAndCountAll({
-      where,
+      where: {
+        ...where,
+        deletedAt: null  // Only show non-deleted users
+      },
       include: [
         { model: Department, attributes: ['id', 'name', 'code'] },
         { model: Location, attributes: ['id', 'name', 'code'] },
@@ -79,6 +84,14 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const user = await User.create(req.body);
+    await AuditLog.create({
+      userId: user.id,
+      action: 'create',
+      entityType: 'User',
+      entityId: user.id,
+      details: user.toJSON(),
+      ipAddress: req.ip
+    });
     res.status(201).json(user);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -91,19 +104,47 @@ router.put('/:id', async (req, res) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     await user.update(req.body);
+    await AuditLog.create({
+      userId: user.id,
+      action: 'update',
+      entityType: 'User',
+      entityId: user.id,
+      details: user.toJSON(),
+      ipAddress: req.ip
+    });
     res.json(user);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-// Delete user
+// Delete user (soft delete - mark as deleted)
 router.delete('/:id', async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    await user.destroy();
-    res.json({ message: 'User deleted' });
+    
+    const deletedAt = new Date();
+    await user.update({ deletedAt });
+    
+    // Log the soft delete
+    await AuditLog.create({
+      userId: user.id,
+      action: 'DELETE',
+      entityType: 'User',
+      entityId: user.id,
+      details: { 
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        deletedAt: deletedAt,
+        reason: 'User marked as deleted'
+      },
+      ipAddress: req.ip
+    });
+    
+    res.json({ message: 'User marked as deleted', user });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

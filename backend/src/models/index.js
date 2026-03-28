@@ -23,7 +23,8 @@ User.belongsTo(Location, { foreignKey: 'locationId' });
 Role.hasMany(User, { foreignKey: 'roleId' });
 User.belongsTo(Role, { foreignKey: 'roleId' });
 
-User.hasMany(AuditLog, { foreignKey: 'userId' });
+// With cascading delete - when user is deleted, audit logs are also deleted
+User.hasMany(AuditLog, { foreignKey: 'userId', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
 AuditLog.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = { sequelize, User, Department, Location, Role, AuditLog };

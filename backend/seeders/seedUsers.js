@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const { sequelize, User, Department, Location, Role } = require('../src/models');
 
 const departments = [
@@ -40,6 +41,30 @@ async function seed() {
     const roleRecords = await Role.bulkCreate(roles);
     console.log('Reference data seeded');
 
+    // Create admin user
+    const adminPasswordHash = await bcrypt.hash('admin', 10);
+    const adminRole = roleRecords.find(r => r.code === 'admin');
+    const adminDept = deptRecords[0];
+    const adminLoc = locRecords[0];
+
+    await User.create({
+      username: 'admin',
+      email: 'admin@company.com',
+      firstName: 'Admin',
+      lastName: 'User',
+      phone: '+1-555-0000',
+      avatar: 'https://i.pravatar.cc/150?u=admin',
+      departmentId: adminDept.id,
+      locationId: adminLoc.id,
+      roleId: adminRole.id,
+      position: 'System Administrator',
+      status: 'active',
+      passwordHash: adminPasswordHash,
+      adSynced: true,
+      adGuid: 'admin-guid-001'
+    });
+    console.log('✓ Admin user created (admin/admin)');
+
     const users = [];
     for (let i = 0; i < 1200; i++) {
       const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
@@ -51,6 +76,9 @@ async function seed() {
         ? new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000) 
         : null;
 
+      const positions = ['System Administrator', 'Developer', 'Support Engineer', 'IT Manager', 'HR Specialist', 'Sales Executive', 'Marketing Analyst', 'Operations Lead'];
+      const position = positions[Math.floor(Math.random() * positions.length)];
+
       users.push({
         username,
         email,
@@ -61,6 +89,7 @@ async function seed() {
         departmentId: deptRecords[Math.floor(Math.random() * deptRecords.length)].id,
         locationId: locRecords[Math.floor(Math.random() * locRecords.length)].id,
         roleId: roleRecords[Math.floor(Math.random() * roleRecords.length)].id,
+        position,
         status,
         lastLoginAt: lastLogin,
         adSynced: Math.random() > 0.3,
