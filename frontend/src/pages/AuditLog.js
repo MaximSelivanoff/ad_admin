@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { auditAPI } from '../services/api';
-import { X } from 'lucide-react';
-import TableHeader from '../components/TableHeader';
-import Pagination from '../components/Pagination';
+import { X, Download } from 'lucide-react';
+import DataTable from '../components/DataTable';
+import { exportToExcel } from '../utils/excelExporter';
 
 const AuditLog = () => {
   const [logs, setLogs] = useState([]);
@@ -19,7 +19,7 @@ const AuditLog = () => {
     startDate: '',
     endDate: ''
   });
-  const [sort, setSort] = useState({ field: 'createdAt', order: 'DESC' });
+  const [sort, setSort] = useState({ field: null, order: 'DESC' });
 
   const loadLogs = async (pageNum = 1, limitNum = limit, newFilter = null, newSort = null) => {
     try {
@@ -35,8 +35,7 @@ const AuditLog = () => {
         ...(activeFilter.search && { search: activeFilter.search }),
         ...(activeFilter.startDate && { startDate: activeFilter.startDate }),
         ...(activeFilter.endDate && { endDate: activeFilter.endDate }),
-        sort: activeSort.field,
-        order: activeSort.order
+        ...(activeSort.field && { sort: activeSort.field, order: activeSort.order })
       };
       const response = await auditAPI.get(params);
       setLogs(response.data.data);
@@ -74,12 +73,8 @@ const AuditLog = () => {
     loadLogs(1, limit, emptyFilter);
   };
 
-  const handleSort = (field) => {
-    let newOrder = 'ASC';
-    if (sort.field === field && sort.order === 'ASC') {
-      newOrder = 'DESC';
-    }
-    const newSort = { field, order: newOrder };
+  const handleSort = (field, order) => {
+    const newSort = { field, order };
     setSort(newSort);
     loadLogs(page, limit, null, newSort);
   };
@@ -97,19 +92,58 @@ const AuditLog = () => {
   const hasActiveFilters = filter.action || filter.entityType || filter.changedBy || filter.search || filter.startDate || filter.endDate;
 
   const columns = [
-    { field: 'createdAt', label: 'Time', sortable: true },
-    { field: 'username', label: 'Changed By', sortable: true },
-    { field: 'action', label: 'Action', sortable: true },
-    { field: 'entityType', label: 'Entity', sortable: false },
-    { field: 'description', label: 'Description', sortable: false }
+    {
+      key: 'createdAt',
+      label: 'Time',
+      sortable: true,
+      formatter: (row) => new Date(row.createdAt).toLocaleString()
+    },
+    {
+      key: 'username',
+      label: 'Changed By',
+      sortable: true,
+      formatter: (row) => row.User?.username || 'System'
+    },
+    {
+      key: 'action',
+      label: 'Action',
+      sortable: true,
+      formatter: (row) => (
+        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getActionBadgeStyle(row.action)}`}>
+          {row.action}
+        </span>
+      )
+    },
+    {
+      key: 'entityType',
+      label: 'Entity',
+      sortable: false,
+      formatter: (row) => <span className="text-gray-600">{row.entityType}</span>
+    },
+    {
+      key: 'entityId',
+      label: 'Description',
+      sortable: false,
+      formatter: (row) => <span className="text-gray-500 truncate">{row.entityType} #{row.entityId}</span>
+    }
   ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4 h-[calc(100vh-80px)] overflow-hidden">
       {/* Filters + Table */}
       <div className="lg:col-span-2 flex flex-col min-h-0">
+        {/* Header with Export */}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold text-gray-800">Audit Log</h1>
+          <button
+            onClick={() => exportToExcel('AuditLog', columns, logs)}
+            className="inline-flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-3 py-1.5 rounded-md text-sm"
+          >
+            <Download size={16} /> Export
+          </button>
+        </div>
         {/* Filters */}
-        <div className="bg-white border rounded-md p-3 mb-4">
+        <div className="bg-white border border-gray-200 rounded-md p-3 mb-4">
           <div className="space-y-2">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <input
@@ -117,12 +151,12 @@ const AuditLog = () => {
                 placeholder="Search..."
                 value={filter.search}
                 onChange={(e) => updateFilter('search', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               />
               <select
                 value={filter.action}
                 onChange={(e) => updateFilter('action', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               >
                 <option value="">All Actions</option>
                 <option value="CREATE">Create</option>
@@ -135,7 +169,7 @@ const AuditLog = () => {
                 placeholder="Entity type..."
                 value={filter.entityType}
                 onChange={(e) => updateFilter('entityType', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               />
             </div>
 
@@ -145,24 +179,24 @@ const AuditLog = () => {
                 placeholder="Changed by username..."
                 value={filter.changedBy}
                 onChange={(e) => updateFilter('changedBy', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               />
               <input
                 type="date"
                 value={filter.startDate}
                 onChange={(e) => updateFilter('startDate', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               />
               <input
                 type="date"
                 value={filter.endDate}
                 onChange={(e) => updateFilter('endDate', e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
               />
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                  className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
                 >
                   Clear
                 </button>
@@ -171,64 +205,28 @@ const AuditLog = () => {
           </div>
         </div>
 
-        {/* Table */}
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-600">Loading...</div>
-        ) : logs.length === 0 ? (
-          <div className="text-gray-600 text-center py-8">No audit events found.</div>
-        ) : (
-          <div className="bg-white border rounded-md shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b sticky top-0">
-                  <tr>
-                    {columns.map(col => (
-                      <TableHeader key={col.field} column={col} sort={sort} onSort={handleSort} />
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((entry) => (
-                    <tr
-                      key={entry.id}
-                      onClick={() => setSelectedLog(entry)}
-                      className="border-b hover:bg-gray-50 cursor-pointer"
-                    >
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">
-                        {new Date(entry.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2 text-sm font-medium">{entry.User?.username || 'System'}</td>
-                      <td className="px-4 py-2">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getActionBadgeStyle(entry.action)}`}>
-                          {entry.action}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">{entry.entityType}</td>
-                      <td className="px-4 py-2 text-xs text-gray-500 truncate max-w-xs">
-                        {entry.entityType} #{entry.entityId}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <Pagination
-              page={page}
-              totalPages={pagination.totalPages}
-              limit={limit}
-              total={pagination.total}
-              onPageChange={(p) => loadLogs(p, limit)}
-              onLimitChange={(l) => loadLogs(1, l)}
-            />
-          </div>
-        )}
+        {/* DataTable */}
+        <DataTable
+          columns={columns}
+          data={logs}
+          loading={loading}
+          selectedRow={selectedLog}
+          onRowClick={setSelectedLog}
+          onSort={handleSort}
+          serverSort={sort.field ? sort : null}
+          pagination={pagination}
+          onPageChange={(p) => loadLogs(p, limit)}
+          onLimitChange={(l) => loadLogs(1, l)}
+          page={page}
+          limit={limit}
+          emptyMessage="No audit events found"
+          hideActions={true}
+        />
       </div>
 
       {/* Details Panel */}
       {selectedLog && (
-        <div className="lg:col-span-1 bg-white border rounded-md shadow-sm p-4 flex flex-col min-h-0">
+        <div className="lg:col-span-1 bg-white border border-gray-200 rounded-md shadow-sm p-4 flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-4 pb-4 border-b">
             <h3 className="font-semibold text-gray-800">{selectedLog.action} Details</h3>
             <button
@@ -239,32 +237,24 @@ const AuditLog = () => {
             </button>
           </div>
 
-          <div className="space-y-4 text-sm overflow-y-auto flex-1">
-            <div>
-              <label className="text-xs font-semibold text-gray-700 uppercase">Timestamp</label>
-              <p className="text-gray-900 mt-1">{new Date(selectedLog.createdAt).toLocaleString()}</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-gray-700 uppercase">Changed By</label>
-              <p className="text-gray-900 mt-1">{selectedLog.User?.username || 'System'}</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-gray-700 uppercase">Email</label>
-              <p className="text-gray-900 mt-1">{selectedLog.User?.email || '-'}</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-gray-700 uppercase">Action</label>
-              <p className={`mt-1 inline-block px-2 py-1 rounded text-xs font-medium ${getActionBadgeStyle(selectedLog.action)}`}>
+          <div className="overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-2 text-xs mb-4 pb-4 border-b">
+              <span className="font-semibold text-gray-700">Timestamp</span>
+              <span className="text-gray-900">{new Date(selectedLog.createdAt).toLocaleString()}</span>
+              
+              <span className="font-semibold text-gray-700">Changed By</span>
+              <span className="text-gray-900">{selectedLog.User?.username || 'System'}</span>
+              
+              <span className="font-semibold text-gray-700">Email</span>
+              <span className="text-gray-900">{selectedLog.User?.email || '-'}</span>
+              
+              <span className="font-semibold text-gray-700">Action</span>
+              <span className={`inline-block px-2 py-1 rounded text-xs font-medium w-fit ${getActionBadgeStyle(selectedLog.action)}`}>
                 {selectedLog.action}
-              </p>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-gray-700 uppercase">Entity</label>
-              <p className="text-gray-900 mt-1">{selectedLog.entityType} #{selectedLog.entityId}</p>
+              </span>
+              
+              <span className="font-semibold text-gray-700">Entity</span>
+              <span className="text-gray-900">{selectedLog.entityType} #{selectedLog.entityId}</span>
             </div>
 
             {selectedLog.action === 'UPDATE' && selectedLog.details?.before && selectedLog.details?.after && (
@@ -300,9 +290,7 @@ const AuditLog = () => {
             {selectedLog.action === 'PASSWORD_RESET' && selectedLog.details && (
               <div className="border-t pt-4">
                 <label className="text-xs font-semibold text-gray-700 uppercase">Details</label>
-                <p className="text-gray-900 mt-1">
-                  Password changed for user: {selectedLog.details.username}
-                </p>
+                <p className="text-gray-900 mt-1">Password reset for user</p>
               </div>
             )}
           </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { usersAPI, referencesAPI } from '../services/api';
-import { Search, Plus, Edit2, Trash2, Filter, X } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Download } from 'lucide-react';
+import DataTable from '../components/DataTable';
 import UserForm from '../components/UserForm';
-import Pagination from '../components/Pagination';
+import { exportToExcel } from '../utils/excelExporter';
 
 const Users = () => {
   const [users, setUsers] = useState([]);
@@ -94,21 +95,81 @@ const Users = () => {
   const getDepartment = (id) => references.departments.find((d) => d.id === id)?.name || '-';
   const getRole = (id) => references.roles.find((r) => r.id === id)?.name || '-';
 
+  // Конфигурация колонок для таблицы
+  const columns = [
+    {
+      key: 'user',
+      label: 'User',
+      sortable: false,
+      formatter: (row) => (
+        <div className="flex items-center gap-2">
+          <img src={row.avatar || `https://i.pravatar.cc/24?u=${row.username}`} alt="avatar" className="w-5 h-5 rounded-full" />
+          <div className="leading-tight">
+            <div className="font-medium text-gray-800 truncate">{row.firstName} {row.lastName}</div>
+            <div className="text-gray-500 text-xs">@{row.username}</div>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      sortable: true,
+      formatter: (row) => <span className="truncate text-xs">{row.email}</span>
+    },
+    {
+      key: 'departmentId',
+      label: 'Department',
+      sortable: true,
+      formatter: (row) => <span className="text-xs">{getDepartment(row.departmentId)}</span>
+    },
+    {
+      key: 'roleId',
+      label: 'Role',
+      sortable: true,
+      formatter: (row) => <span className="text-xs">{getRole(row.roleId)}</span>
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      formatter: (row) => (
+        <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${row.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+          {row.status}
+        </span>
+      )
+    },
+    {
+      key: 'lastLoginAt',
+      label: 'Last login',
+      sortable: true,
+      formatter: (row) =>row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleDateString() : '—'
+    }
+  ];
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4 h-[calc(100vh-80px)] overflow-hidden">
       {/* Table */}
       <div className="lg:col-span-2 flex flex-col min-h-0">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h1 className="text-2xl font-bold text-gray-800">Users</h1>
-          <button
-            onClick={() => {
-              setEditingUser(null);
-              setShowForm(true);
-            }}
-            className="inline-flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-md text-sm"
-          >
-            <Plus size={16} /> Add User
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportToExcel('Users', columns, users)}
+              className="inline-flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-3 py-1.5 rounded-md text-sm"
+            >
+              <Download size={16} /> Export
+            </button>
+            <button
+              onClick={() => {
+                setEditingUser(null);
+                setShowForm(true);
+              }}
+              className="inline-flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-md text-sm"
+            >
+              <Plus size={16} /> Add User
+            </button>
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-md p-3 mb-4">
@@ -155,85 +216,21 @@ const Users = () => {
           </div>
         </div>
 
-        {/* Table */}
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-600">Loading...</div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-md shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-xs md:text-sm">
-                <thead className="bg-gray-50 text-gray-700 uppercase sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left">User</th>
-                    <th className="px-3 py-2 text-left">Email</th>
-                    <th className="px-3 py-2 text-left">Department</th>
-                    <th className="px-3 py-2 text-left">Role</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Last login</th>
-                    <th className="px-3 py-2 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
-                    <tr><td colSpan="7" className="p-4 text-center text-gray-500">No users found</td></tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.id} className="border-t hover:bg-gray-50">
-                        <td className="px-3 py-2 cursor-pointer" onClick={() => selectUser(user)}>
-                          <div className="flex items-center gap-2">
-                            <img src={user.avatar || `https://i.pravatar.cc/24?u=${user.username}`} alt="avatar" className="w-5 h-5 rounded-full" />
-                            <div className="leading-tight">
-                              <div className="font-medium text-gray-800 truncate">{user.firstName} {user.lastName}</div>
-                              <div className="text-gray-500 text-xs">@{user.username}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 truncate text-xs">{user.email}</td>
-                        <td className="px-3 py-2 text-xs">{getDepartment(user.departmentId)}</td>
-                        <td className="px-3 py-2 text-xs">{getRole(user.roleId)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                            {user.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : '—'}</td>
-                        <td className="px-3 py-2 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => selectUser(user)}
-                              className="p-1 rounded hover:bg-gray-200 text-blue-600"
-                              title="View"
-                            ><Filter size={14} /></button>
-                            <button
-                              onClick={() => { setEditingUser(user); setShowForm(true); }}
-                              className="p-1 rounded hover:bg-gray-200 text-indigo-600"
-                              title="Edit"
-                            ><Edit2 size={14} /></button>
-                            <button
-                              onClick={() => handleDelete(user.id)}
-                              className="p-1 rounded hover:bg-gray-200 text-red-600"
-                              title="Delete"
-                            ><Trash2 size={14} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <Pagination
-              page={page}
-              totalPages={pagination.totalPages}
-              limit={limit}
-              total={pagination.total}
-              onPageChange={(p) => loadUsers(p, limit)}
-              onLimitChange={(l) => loadUsers(1, l)}
-            />
-          </div>
-        )}
+        {/* DataTable */}
+        <DataTable
+          columns={columns}
+          data={users}
+          loading={loading}
+          selectedRow={selectedUser}
+          onRowClick={selectUser}
+          onRowAction={handleDelete}
+          pagination={pagination}
+          onPageChange={(p) => loadUsers(p, limit)}
+          onLimitChange={(l) => loadUsers(1, l)}
+          page={page}
+          limit={limit}
+          emptyMessage="No users found"
+        />
       </div>
 
       {/* Details Panel */}
@@ -246,8 +243,8 @@ const Users = () => {
             </button>
           </div>
 
-          <div className="space-y-4 text-sm overflow-y-auto flex-1">
-            <div className="flex items-center gap-3 pb-4 border-b">
+          <div className="overflow-y-auto flex-1">
+            <div className="flex items-center gap-3 pb-4 mb-4 border-b">
               <img src={selectedUser.avatar || `https://i.pravatar.cc/64?u=${selectedUser.username}`} className="w-12 h-12 rounded-full" alt="Avatar" />
               <div>
                 <h3 className="font-bold text-gray-800">{selectedUser.firstName} {selectedUser.lastName}</h3>
@@ -255,40 +252,40 @@ const Users = () => {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Email</label>
-                <p className="text-gray-900 mt-1">{selectedUser.email}</p>
+            <div className="grid grid-cols-1 gap-3 text-xs">
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Email</span>
+                <span className="col-span-2 text-gray-900">{selectedUser.email}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Phone</label>
-                <p className="text-gray-900 mt-1">{selectedUser.phone || '—'}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Phone</span>
+                <span className="col-span-2 text-gray-900">{selectedUser.phone || '—'}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Position</label>
-                <p className="text-gray-900 mt-1">{selectedUser.position || '—'}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Position</span>
+                <span className="col-span-2 text-gray-900">{selectedUser.position || '—'}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Department</label>
-                <p className="text-gray-900 mt-1">{getDepartment(selectedUser.departmentId)}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Department</span>
+                <span className="col-span-2 text-gray-900">{getDepartment(selectedUser.departmentId)}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Location</label>
-                <p className="text-gray-900 mt-1">{getLocation(selectedUser.locationId)}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Location</span>
+                <span className="col-span-2 text-gray-900">{getLocation(selectedUser.locationId)}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Role</label>
-                <p className="text-gray-900 mt-1">{getRole(selectedUser.roleId)}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Role</span>
+                <span className="col-span-2 text-gray-900">{getRole(selectedUser.roleId)}</span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Status</label>
-                <p className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${selectedUser.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Status</span>
+                <span className={`col-span-2 inline-block px-2 py-0.5 rounded text-xs font-medium w-fit ${selectedUser.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                   {selectedUser.status}
-                </p>
+                </span>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 uppercase">Last Login</label>
-                <p className="text-gray-900 mt-1">{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : '—'}</p>
+              <div className="grid grid-cols-3 gap-2 pb-2 border-b">
+                <span className="font-semibold text-gray-700">Last Login</span>
+                <span className="col-span-2 text-gray-900">{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : '—'}</span>
               </div>
             </div>
 
